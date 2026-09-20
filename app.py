@@ -7,71 +7,96 @@ st.set_page_config(page_title="Derivatives Corner", page_icon="📊", layout="wi
 
 API_BASE = "https://nse-derivatives-api.onrender.com"
 
-# Custom CSS for styling matching UI
+# Custom CSS for styling
 st.markdown("""
     <style>
-    /* Metric Hot Stock Card */
+    /* Hot Stocks Card */
     .metric-card {
         background-color: #1e293b;
         border: 1px solid #f97316;
         border-radius: 8px;
-        padding: 12px;
+        padding: 8px;
         text-align: center;
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        margin-bottom: 12px;
+        margin-bottom: 8px;
     }
     .hot-title {
         color: #fb923c;
         font-weight: bold;
-        font-size: 1.05rem;
-        margin-bottom: 4px;
+        font-size: 0.95rem;
+        margin-bottom: 2px;
     }
 
-    /* Card Layout for Top 10 (Image 3 Style) */
-    .stock-card {
-        border-radius: 10px;
-        padding: 10px 16px;
+    /* 7-Column Stock Cards */
+    .column-title {
+        font-size: 0.92rem;
+        font-weight: 700;
         margin-bottom: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+    }
+    .stock-card {
+        border-radius: 7px;
+        padding: 6px 8px;
+        margin-bottom: 8px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        min-height: 48px;
     }
     .stock-card-green {
-        background-color: #eafaf1;
-        border: 1.5px solid #22c55e;
+        background-color: #f0fdf4;
+        border: 1.2px solid #22c55e;
     }
     .stock-card-red {
         background-color: #fef2f2;
-        border: 1.5px solid #ef4444;
+        border: 1.2px solid #ef4444;
+    }
+    .stock-left {
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        margin-right: 4px;
     }
     .stock-symbol {
-        font-weight: 800;
-        font-size: 0.95rem;
+        font-weight: 700;
+        font-size: 0.78rem;
         color: #0f172a;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .stock-rank {
-        color: #475569;
+        color: #64748b;
         font-weight: 700;
-        margin-right: 6px;
+        font-size: 0.75rem;
+        margin-right: 4px;
+        white-space: nowrap;
     }
     .stock-right {
         text-align: right;
+        flex-shrink: 0;
     }
     .stock-change-green {
         color: #16a34a;
-        font-weight: 800;
-        font-size: 1rem;
+        font-weight: 700;
+        font-size: 0.8rem;
+        line-height: 1.1;
     }
     .stock-change-red {
         color: #dc2626;
-        font-weight: 800;
-        font-size: 1rem;
+        font-weight: 700;
+        font-size: 0.8rem;
+        line-height: 1.1;
     }
     .stock-vol {
-        font-size: 0.75rem;
-        color: #64748b;
-        margin-top: -2px;
+        font-size: 0.65rem;
+        color: #94a3b8;
+        line-height: 1;
+        margin-top: 2px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -90,20 +115,18 @@ def fetch_data(endpoint):
         st.error(f"Error fetching {endpoint}: {e}")
     return None
 
-# Load data
 with st.spinner("Fetching live NSE data..."):
     gainers = fetch_data("/api/gainers") or []
     losers = fetch_data("/api/losers") or []
     active = fetch_data("/api/most-active") or []
     buildup = fetch_data("/api/buildup") or {}
 
-# Process and Deduplicate function to avoid repetitive symbols
+# Deduplicate by symbol so names don't repeat
 def prepare_df(data):
     if not data:
         return pd.DataFrame()
     df = pd.DataFrame(data)
     if "symbol" in df.columns:
-        # Standardize symbol names and remove duplicates
         df["symbol"] = df["symbol"].astype(str).str.strip()
         df = df.drop_duplicates(subset=["symbol"], keep="first")
     return df
@@ -111,7 +134,6 @@ def prepare_df(data):
 df_gainers = prepare_df(gainers)
 df_losers = prepare_df(losers)
 df_active = prepare_df(active)
-
 df_long = prepare_df(buildup.get("longBuildup", []))
 df_short = prepare_df(buildup.get("shortBuildup", []))
 df_covering = prepare_df(buildup.get("shortCovering", []))
@@ -120,7 +142,6 @@ df_unwinding = prepare_df(buildup.get("longUnwinding", []))
 # ---------- SEARCH BAR ----------
 search_query = st.text_input("🔍 Search by stock symbol (e.g. TCS, NIFTY)", "").strip().upper()
 
-# Filter function
 def filter_df(df):
     if df.empty:
         return pd.DataFrame()
@@ -163,7 +184,7 @@ if hot_stocks:
             st.markdown(f"""
                 <div class="metric-card">
                     <div class="hot-title">🔥 {sym}</div>
-                    <span style="font-size:0.8rem; color:#cbd5e1;">{', '.join(cats)}</span>
+                    <span style="font-size:0.75rem; color:#cbd5e1;">{', '.join(cats)}</span>
                 </div>
             """, unsafe_allow_html=True)
 else:
@@ -171,32 +192,38 @@ else:
 
 st.markdown("---")
 
-# ---------- CARD RENDERER (IMAGE 3 UI) ----------
+# ---------- 7-COLUMN DASHBOARD ----------
 
 def render_stock_cards(df, default_positive=True):
     sliced_df = filter_df(df)
     if sliced_df.empty:
-        st.write("") # Leave empty as requested
+        st.write("")  # Keep completely empty if no data
         return
 
     for idx, (_, row) in enumerate(sliced_df.iterrows(), start=1):
         sym = row.get("symbol", "-")
         
-        # Determine percentage change from common column keys
+        # Percentage Change
         raw_pchange = row.get("perChange", row.get("pChange", 0.0))
         try:
             pchange = float(raw_pchange)
         except (ValueError, TypeError):
             pchange = 0.0
 
-        # Determine volume if available
+        # Volume / OI formatting
         vol = row.get("totalTradedVolume", row.get("quantityTraded", row.get("changeInOI", "-")))
         if isinstance(vol, (int, float)) and vol != "-":
-            vol_str = f"{vol:,.0f}"
+            vol_abs = abs(vol)
+            if vol_abs >= 1_000_000:
+                vol_str = f"{vol/1_000_000:.1f}M"
+            elif vol_abs >= 1_000:
+                vol_str = f"{vol/1_000:.1f}k"
+            else:
+                vol_str = f"{vol:.0f}"
         else:
-            vol_str = str(vol) if vol != "-" else "-"
+            vol_str = "-"
 
-        # Card theme (Green vs Red)
+        # Card theme selection
         is_positive = pchange > 0 if pchange != 0.0 else default_positive
         card_class = "stock-card-green" if is_positive else "stock-card-red"
         change_class = "stock-change-green" if is_positive else "stock-change-red"
@@ -204,9 +231,9 @@ def render_stock_cards(df, default_positive=True):
 
         st.markdown(f"""
             <div class="stock-card {card_class}">
-                <div>
+                <div class="stock-left">
                     <span class="stock-rank">#{idx}</span>
-                    <span class="stock-symbol">{sym}</span>
+                    <span class="stock-symbol" title="{sym}">{sym}</span>
                 </div>
                 <div class="stock-right">
                     <div class="{change_class}">{sign}{pchange:.2f}%</div>
@@ -215,41 +242,38 @@ def render_stock_cards(df, default_positive=True):
             </div>
         """, unsafe_allow_html=True)
 
-# Main Section View (Side-by-Side Gainers & Losers as in Image 3)
-col_left, col_right = st.columns(2)
+# 7 side-by-side columns
+c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
 
-with col_left:
-    st.markdown("### 🟢 Top Gainers")
+with c1:
+    st.markdown('<div class="column-title">🟢 Top Gainers</div>', unsafe_allow_html=True)
     render_stock_cards(df_gainers, default_positive=True)
 
-with col_right:
-    st.markdown("### 🔴 Top Losers")
+with c2:
+    st.markdown('<div class="column-title">🔴 Top Losers</div>', unsafe_allow_html=True)
     render_stock_cards(df_losers, default_positive=False)
 
-st.markdown("---")
-
-# Tabbed view for Buildup categories
-tab_act, tab_lb, tab_sb, tab_sc, tab_lu = st.tabs([
-    "🔥 Most Active", "🟢 Long Buildup", "🔴 Short Buildup", 
-    "🟡 Short Covering", "🟠 Long Unwinding"
-])
-
-with tab_act:
+with c3:
+    st.markdown('<div class="column-title">🔥 Most Active</div>', unsafe_allow_html=True)
     render_stock_cards(df_active, default_positive=True)
 
-with tab_lb:
+with c4:
+    st.markdown('<div class="column-title">🟢 Long Buildup</div>', unsafe_allow_html=True)
     render_stock_cards(df_long, default_positive=True)
 
-with tab_sb:
+with c5:
+    st.markdown('<div class="column-title">🔴 Short Buildup</div>', unsafe_allow_html=True)
     render_stock_cards(df_short, default_positive=False)
 
-with tab_sc:
+with c6:
+    st.markdown('<div class="column-title">🟡 Short Covering</div>', unsafe_allow_html=True)
     render_stock_cards(df_covering, default_positive=True)
 
-with tab_lu:
+with c7:
+    st.markdown('<div class="column-title">🟠 Long Unwinding</div>', unsafe_allow_html=True)
     render_stock_cards(df_unwinding, default_positive=False)
 
-# Sidebar
+# Sidebar Refresh
 if st.sidebar.button("🔄 Manual Refresh"):
     st.cache_data.clear()
     st.rerun()
